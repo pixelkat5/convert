@@ -15,44 +15,71 @@ async function init () {
     coreURL: "/node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js",
   });
 
-  let formatDumpStarted = false;
-  const handleFormatDump = ({ message }) => {
+  let stdout = "";
+  const readStdout = ({ message }) => stdout += message + "\n";
 
-    if (message === " --") return formatDumpStarted = true;
-    else if (!formatDumpStarted) return;
+  const getMuxerDetails = async (muxer) => {
+
+    stdout = "";
+    ffmpeg.on("log", readStdout);
+    await ffmpeg.exec(["-hide_banner", "-h", "muxer=" + muxer]);
+    ffmpeg.off("log", readStdout);
+
+    return {
+      extension: stdout.split("Common extensions: ")[1].split(".")[0].split(",")[0],
+      mimeType: stdout.split("Mime type: ")[1].split(".")[0]
+    };
+
+  }
+
+  stdout = "";
+  ffmpeg.on("log", readStdout);
+  await ffmpeg.exec(["-formats", "-hide_banner"]);
+  ffmpeg.off("log", readStdout);
+
+  const lines = stdout.split(" --\n")[1].split("\n");
+
+  for (let line of lines) {
 
     let len;
     do {
-      len = message.length;
-      message = message.replaceAll("  ", " ");
-    } while (len !== message.length);
-    message = message.trim();
+      len = line.length;
+      line = line.replaceAll("  ", " ");
+    } while (len !== line.length);
+    line = line.trim();
 
-    const parts = message.split(" ");
+    const parts = line.split(" ");
     if (parts.length < 2) return;
 
     const flags = parts[0];
     const description = parts.slice(2).join(" ");
-    const extensions = parts[1].split(",");
+    const formats = parts[1].split(",");
 
-    // TODO: Extract specifics with `ffmpeg -hide_banner -h muxer=<format>`
-    for (const extension of extensions) {
+    for (const format of formats) {
+
+      let extension, mimeType;
+      try {
+        const details = await getMuxerDetails(formats[0]);
+        extension = details.extension;
+        mimeType = details.mimeType;
+      } catch {
+        extension = format;
+        mimeType = mime.getType(format) || ("video/" + format);
+      }
+
       supportedFormats.push({
-        name: description + (extensions.length > 1 ? (" / " + extension) : ""),
-        format: extension,
-        extension: extension,
-        mime: mime.getType(extension) || ("video/" + extension),
+        name: description + (formats.length > 1 ? (" / " + format) : ""),
+        format,
+        extension,
+        mime: mimeType,
         from: flags.includes("D"),
         to: flags.includes("E"),
-        internal: extension
+        internal: format
       });
+
     }
 
-  };
-
-  ffmpeg.on("log", handleFormatDump);
-  await ffmpeg.exec(["-formats", "-hide_banner"]);
-  ffmpeg.off("log", handleFormatDump);
+  }
 
   await ffmpeg.terminate();
 
