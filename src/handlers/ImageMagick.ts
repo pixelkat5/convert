@@ -28,6 +28,7 @@ class ImageMagickHandler implements FormatHandler {
 
     Magick.supportedFormats.forEach(format => {
       const formatName = format.format.toLowerCase();
+      if (formatName === "apng") return;
       const mimeType = format.mimeType || mime.getType(formatName);
       if (
         !mimeType
@@ -47,7 +48,7 @@ class ImageMagickHandler implements FormatHandler {
 
     // ====== Manual fine-tuning ======
 
-    const prioritize = ["png", "jpeg", "apng", "gif", "pdf"];
+    const prioritize = ["png", "jpeg", "gif", "pdf"];
     prioritize.reverse();
 
     this.supportedFormats.sort((a, b) => {
